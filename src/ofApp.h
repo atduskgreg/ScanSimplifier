@@ -25,4 +25,11 @@ class ofApp : public ofBaseApp{
     ofxANN ann;
     ofxPCA pca;
     int nNeighbors;
+    ofVec3f center;
+    
+    int zoom;
+    int up;
+    int left;
+    
+    void drawNormals(const ofMesh& mesh);
 };
