@@ -3,6 +3,7 @@
 //--------------------------------------------------------------
 void ofApp::setup(){
     nNeighbors = 7;
+    maxAngle = 15; // degrees
     
     zoom = 1;
     up =0;
@@ -11,10 +12,8 @@ void ofApp::setup(){
     depthImage.loadImage("depth.png");
     unsigned char * pixels = depthImage.getPixels();
     
-    
-    
-    for(int row = 0; row < depthImage.getHeight(); row+=2){
-        for(int col = 0; col < depthImage.getWidth(); col+=2){
+    for(int row = 0; row < depthImage.getHeight(); row+=10){
+        for(int col = 0; col < depthImage.getWidth(); col+=10){
             int i = row * depthImage.getWidth() + col;
             
             if(pixels[i] != 0){
@@ -35,34 +34,85 @@ void ofApp::setup(){
     
     float before = ofGetElapsedTimef();
     
-    vector<ofVec3f> neighborMatrix;
-    ofxPCAResult r;
+   
     for(int i = 0; i < mesh.getVertices().size(); i++){
         ofVec3f p = mesh.getVertices()[i];
         vector<ofVec3f> neighbors = ann.getNeighborVectors(nNeighbors, p, true);
-        neighborMatrix.insert(neighborMatrix.end(), neighbors.begin(), neighbors.end());
-    }
-    
-    float matrixBuilt = ofGetElapsedTimef();
-    
-    cout << "matrix built: "<< (matrixBuilt-before) << "s" << endl;
-    
-    pca.loadData(neighborMatrix);
-    
-    float pcaLoaded =ofGetElapsedTimef();
-    
-    cout << "PCA data loaded: " << (pcaLoaded-matrixBuilt) << "s" << endl;
-    
-    for(int i = 0; i < mesh.getVertices().size(); i++){
-        ofxPCAResult r = pca.analyze(0, nNeighbors*i, 3, nNeighbors+1);
+        ofxPCAResult r = pca.analyze(neighbors);
+        // eigenvectors are sorted in descending order by eigenvalue
+        // we want one corresponding to the smallest eigenvalue
         mesh.addNormal(r.eigenvectors.back());
     }
     
-    cout << "PCA peformed: " << (ofGetElapsedTimef() - pcaLoaded) << endl;
+    float normalsDone = ofGetElapsedTimef();
+    cout << "normals done: " << (normalsDone - before) << endl;
     
-    cout << "neighborMatrix entries: " << neighborMatrix.size() << endl;
-    cout << "             should be: " << (mesh.getVertices().size() * (nNeighbors+1)) << endl;
-    cout << "[n: " << nNeighbors << " pts: " << mesh.getVertices().size() <<"] time elapsed: " << (ofGetElapsedTimef() -before) << endl;
+    cout << "num vertices: " << mesh.getNumVertices() << endl;
+    // initialize adjacency matrix
+    //MatrixXf adjacency(MatrixXf::Constant(mesh.getNumVertices(),mesh.getNumVertices(), 0));
+    // for each vertex
+    
+
+    MatrixXf adjacency = MatrixXf::Zero(mesh.getNumVertices(),mesh.getNumVertices());
+    cout << "num normals: " << mesh.getNumNormals() << endl;
+    
+    for(int i = 0; i < mesh.getVertices().size(); i++){
+        cout << i << endl;
+        //  write zeroes for the full col
+        vector<ofxANNNeighbor> neighbors = ann.getNeighbors(nNeighbors, mesh.getVertices()[i], false);
+        
+        ofVec3f vertexNormal = mesh.getNormal(i);
+
+        if(neighbors.size() > 2){
+            for(int j = 0; j < neighbors.size(); j++){
+                cout << neighbors[j].x << "," << neighbors[j].y << "," << neighbors[j].z << " d: " << neighbors[j].distance << " idx: " << neighbors[j].idx << endl;
+                
+                ofVec3f neighborNormal = mesh.getNormal( neighbors[j].idx );
+                //  check the neigbors for the angle between the normals
+                float angle = vertexNormal.angle(neighborNormal);
+                if(abs(angle) < maxAngle){
+                   adjacency(i,neighbors[j].idx) = 1;
+                } else {
+                    adjacency(i,neighbors[j].idx) = 0;
+                }
+            }
+            //don't forget to write a 1 for the current vertex (Aii)
+            adjacency(i,i) = 1;
+        }
+    }
+    
+    float adjacencyDone = ofGetElapsedTimef();
+    
+    cout << "adjacency matrix built: " << (adjacencyDone - normalsDone) << endl;
+    
+    
+    
+    // HERE:
+    // make ofxANN return array of indices
+    // use that indices to build the adjacency matrix
+
+    
+    
+//    float matrixBuilt = ofGetElapsedTimef();
+//    
+//    cout << "matrix built: "<< (matrixBuilt-before) << "s" << endl;
+//    
+//
+//    float pcaLoaded =ofGetElapsedTimef();
+//    
+//    cout << "PCA data loaded: " << (pcaLoaded-matrixBuilt) << "s" << endl;
+//   
+    
+//    for(int i = 0; i < mesh.getVertices().size(); i++){
+//        ofxPCAResult r = pca.analyze(0, nNeighbors*i, 3, nNeighbors+1);
+//        mesh.addNormal(r.eigenvectors.back());
+//    }
+    
+//    cout << "PCA peformed: " << (ofGetElapsedTimef() - pcaLoaded) << endl;
+//    
+//    cout << "neighborMatrix entries: " << neighborMatrix.size() << endl;
+//    cout << "             should be: " << (mesh.getVertices().size() * (nNeighbors+1)) << endl;
+//    cout << "[n: " << nNeighbors << " pts: " << mesh.getVertices().size() <<"] time elapsed: " << (ofGetElapsedTimef() -before) << endl;
 
 }
 

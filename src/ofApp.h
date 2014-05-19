@@ -20,16 +20,21 @@ class ofApp : public ofBaseApp{
 		void dragEvent(ofDragInfo dragInfo);
 		void gotMessage(ofMessage msg);
     
+    // knobs!
+    int nNeighbors;
+    float maxAngle;
+    
     ofMesh mesh;
     ofImage depthImage;
     ofxANN ann;
     ofxPCA pca;
-    int nNeighbors;
     ofVec3f center;
     
+    // UI
     int zoom;
     int up;
     int left;
+    
     
     void drawNormals(const ofMesh& mesh);
 };
