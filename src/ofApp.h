@@ -34,6 +34,7 @@ class ofApp : public ofBaseApp{
     int zoom;
     int up;
     int left;
+    bool showNormals;
     
     
     void drawNormals(const ofMesh& mesh);

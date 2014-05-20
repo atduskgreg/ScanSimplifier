@@ -2,23 +2,26 @@
 
 //--------------------------------------------------------------
 void ofApp::setup(){
-    nNeighbors = 7;
-    maxAngle = 15; // degrees
+    nNeighbors = 300;
+    maxAngle = 95; // degrees
     
     zoom = 1;
-    up =0;
+    up = 0;
     left = 0;
+    showNormals = true;
     
     depthImage.loadImage("depth.png");
     unsigned char * pixels = depthImage.getPixels();
-    
-    for(int row = 0; row < depthImage.getHeight(); row+=10){
-        for(int col = 0; col < depthImage.getWidth(); col+=10){
+    mesh.enableColors();
+
+    for(int row = 0; row < depthImage.getHeight(); row+=5){
+        for(int col = 0; col < depthImage.getWidth(); col+=5){
             int i = row * depthImage.getWidth() + col;
             
             if(pixels[i] != 0){
                 ofPoint p =  ofPoint(col, row, pixels[i]*2);
                 mesh.addVertex(p);
+                mesh.addColor(ofColor(255));
                 center.x += p.x;
                 center.y += p.y;
                 center.z += p.z;
@@ -48,71 +51,97 @@ void ofApp::setup(){
     cout << "normals done: " << (normalsDone - before) << endl;
     
     cout << "num vertices: " << mesh.getNumVertices() << endl;
-    // initialize adjacency matrix
-    //MatrixXf adjacency(MatrixXf::Constant(mesh.getNumVertices(),mesh.getNumVertices(), 0));
-    // for each vertex
-    
+
 
     MatrixXf adjacency = MatrixXf::Zero(mesh.getNumVertices(),mesh.getNumVertices());
     cout << "num normals: " << mesh.getNumNormals() << endl;
     
+    int nOnes = 0;
+    
     for(int i = 0; i < mesh.getVertices().size(); i++){
-        cout << i << endl;
-        //  write zeroes for the full col
         vector<ofxANNNeighbor> neighbors = ann.getNeighbors(nNeighbors, mesh.getVertices()[i], false);
         
         ofVec3f vertexNormal = mesh.getNormal(i);
 
-        if(neighbors.size() > 2){
             for(int j = 0; j < neighbors.size(); j++){
-                cout << neighbors[j].x << "," << neighbors[j].y << "," << neighbors[j].z << " d: " << neighbors[j].distance << " idx: " << neighbors[j].idx << endl;
+//                cout << neighbors[j].x << "," << neighbors[j].y << "," << neighbors[j].z << " d: " << neighbors[j].distance << " idx: " << neighbors[j].idx << endl;
                 
                 ofVec3f neighborNormal = mesh.getNormal( neighbors[j].idx );
                 //  check the neigbors for the angle between the normals
                 float angle = vertexNormal.angle(neighborNormal);
+                cout << abs(angle) << endl;
                 if(abs(angle) < maxAngle){
-                   adjacency(i,neighbors[j].idx) = 1;
+                    cout << i << "," << j << endl;
+                    adjacency(i,neighbors[j].idx) = 1;
+                    nOnes++;
                 } else {
                     adjacency(i,neighbors[j].idx) = 0;
                 }
             }
             //don't forget to write a 1 for the current vertex (Aii)
             adjacency(i,i) = 1;
-        }
     }
+    cout << nOnes << "/" << (mesh.getNumVertices() * mesh.getNumVertices()) << endl;
     
     float adjacencyDone = ofGetElapsedTimef();
     
     cout << "adjacency matrix built: " << (adjacencyDone - normalsDone) << endl;
     
+    // connected components
     
+    // initialize a vector of labels with 0s
+    vector<int> labels(mesh.getVertices().size());
     
-    // HERE:
-    // make ofxANN return array of indices
-    // use that indices to build the adjacency matrix
+    ofColor labelColor;
+    int numNonzero = 0;
+    for(int i = 0; i < mesh.getVertices().size(); i++){
+        for(int j = 0; j < mesh.getVertices().size(); j++){
+            if(adjacency(i,j) != 0){
+                numNonzero++;
+            }
+        }
+    }
+    
+    int n = mesh.getNumVertices() * mesh.getNumVertices();
+    
+    cout << "num non-zero: " << numNonzero << "/" << n << " (" << (numNonzero/(float)n)  <<")" << endl;
+    
+    int component = 0;
+    queue<int> q;
+    for(int i = 0; i < mesh.getVertices().size(); i++){
+        
+        if(labels[i] == 0){
+            component++;
+            labelColor = ofColor(ofRandom(255),ofRandom(255),ofRandom(255) );
+            
+            q.push(i);
 
+            while(!q.empty()){
+                // pop a vertex off the queue
+                int idx =  q.front();
+                q.pop();
+
+                // label the current vertex
+                labels[idx] = component;
+                mesh.setColor(idx, labelColor );
+                // get the vertex's neighbors
+                vector<ofxANNNeighbor> neighbors = ann.getNeighbors(nNeighbors, mesh.getVertices()[idx], false);
+                // for each neighbor j
+                for(int j = 0; j < neighbors.size(); j++){
+                    // look up the Aij entry in the adjacency matrix
+                    ofxANNNeighbor n = neighbors[j];
+                    // if that entry is 1 and its label is currently 0
+                    if(adjacency(i,n.idx) == 1 && labels[n.idx] == 0){
+                        // add it to the queue
+                        q.push(n.idx);
+                    }
+                }
+            }
+        }
+    }
     
+    cout << "num components: " << component << endl;
     
-//    float matrixBuilt = ofGetElapsedTimef();
-//    
-//    cout << "matrix built: "<< (matrixBuilt-before) << "s" << endl;
-//    
-//
-//    float pcaLoaded =ofGetElapsedTimef();
-//    
-//    cout << "PCA data loaded: " << (pcaLoaded-matrixBuilt) << "s" << endl;
-//   
-    
-//    for(int i = 0; i < mesh.getVertices().size(); i++){
-//        ofxPCAResult r = pca.analyze(0, nNeighbors*i, 3, nNeighbors+1);
-//        mesh.addNormal(r.eigenvectors.back());
-//    }
-    
-//    cout << "PCA peformed: " << (ofGetElapsedTimef() - pcaLoaded) << endl;
-//    
-//    cout << "neighborMatrix entries: " << neighborMatrix.size() << endl;
-//    cout << "             should be: " << (mesh.getVertices().size() * (nNeighbors+1)) << endl;
-//    cout << "[n: " << nNeighbors << " pts: " << mesh.getVertices().size() <<"] time elapsed: " << (ofGetElapsedTimef() -before) << endl;
 
 }
 
@@ -133,8 +162,9 @@ void ofApp::draw(){
     glPointSize(3);
     mesh.drawVertices();
 
-    drawNormals(mesh);
-
+    if(showNormals){
+        drawNormals(mesh);
+    }
     
 }
 
@@ -153,7 +183,6 @@ void ofApp::drawNormals(const ofMesh& mesh){
 
 //--------------------------------------------------------------
 void ofApp::keyPressed(int key){
-    cout << key << endl;
     if(key == 61){
         zoom++;
     }
@@ -174,7 +203,9 @@ void ofApp::keyPressed(int key){
         up++;
     }
     
-    if(key == 3)
+    if(key == 110){
+        showNormals = !showNormals;
+    }
     
     if(zoom < 0){
         zoom = 0;
